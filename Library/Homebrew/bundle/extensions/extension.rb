@@ -113,11 +113,21 @@ module Homebrew
 
       sig { returns(String) }
       def self.switch_description
-        "`list` or `dump` #{banner_name}."
+        actions = ["`list`", "`dump`"]
+        actions << "`cleanup`" if cleanup_supported?
+        "#{actions.to_sentence} #{banner_name}."
       end
 
       sig { abstract.params(name: String, options: EntryOptions).returns(Dsl::Entry) }
       def self.entry(name, options = {}); end
+
+      sig { params(entry: Dsl::Entry).returns(EntryOptions) }
+      def self.entry_options(entry)
+        options = entry.options
+        return {} unless options.is_a?(Hash)
+
+        options
+      end
 
       sig { returns(String) }
       def self.flag
@@ -213,11 +223,13 @@ module Homebrew
       sig { params(package: Object).returns(String) }
       def self.dump_entry(package)
         line = "#{type} #{quote(dump_name(package))}"
-        with = dump_with(package)
-        return line if with.blank?
+        options = dump_options(package)
+        return line if options.blank?
 
-        formatted_with = with.map { |requirement| quote(requirement) }.join(", ")
-        "#{line}, with: [#{formatted_with}]"
+        formatted_options = options.map do |key, value|
+          "#{key}: #{dump_option_value(value)}"
+        end.join(", ")
+        "#{line}, #{formatted_options}"
       end
 
       sig { params(value: String).returns(String) }
@@ -225,14 +237,26 @@ module Homebrew
         value.inspect
       end
 
+      sig { params(value: Object).returns(String) }
+      def self.dump_option_value(value)
+        case value
+        when Array
+          "[#{value.map { |item| dump_option_value(item) }.join(", ")}]"
+        when String
+          quote(value)
+        else
+          value.inspect
+        end
+      end
+
       sig { params(package: Object).returns(String) }
       def self.dump_name(package)
         package.to_s
       end
 
-      sig { params(_package: Object).returns(T.nilable(T::Array[String])) }
-      def self.dump_with(_package)
-        nil
+      sig { params(_package: Object).returns(T::Hash[Symbol, Object]) }
+      def self.dump_options(_package)
+        {}
       end
 
       sig { returns(String) }
@@ -260,27 +284,37 @@ module Homebrew
       sig { params(_items: T::Array[String]).void }
       def self.cleanup!(_items); end
 
-      sig { params(name: String, with: T.nilable(T::Array[String])).returns(Object) }
-      def self.package_record(name, with: nil)
-        _ = with
+      sig { params(name: String, options: EntryOptions).returns(Object) }
+      def self.package_record_for(name, options = {})
+        _ = options
 
         name
       end
 
-      sig { params(name: String, with: T.nilable(T::Array[String])).returns(T::Boolean) }
-      def self.package_installed?(name, with: nil)
-        installed_packages.include?(package_record(name, with:))
+      sig { params(name: String, options: EntryOptions).returns(Object).checked(:never) }
+      def self.package_record(name, **options)
+        package_record_for(name, options)
+      end
+
+      sig { params(name: String, options: EntryOptions).returns(T::Boolean) }
+      def self.package_installed_for?(name, options = {})
+        installed_packages.include?(package_record_for(name, options))
+      end
+
+      sig { params(name: String, options: EntryOptions).returns(T::Boolean).checked(:never) }
+      def self.package_installed?(name, **options)
+        package_installed_for?(name, options)
       end
 
       sig {
         params(
           name:       String,
-          with:       T.nilable(T::Array[String]),
+          options:    EntryOptions,
           no_upgrade: T::Boolean,
           verbose:    T::Boolean,
         ).returns(T::Boolean)
       }
-      def self.preinstall!(name, with: nil, no_upgrade: false, verbose: false)
+      def self.preinstall_with_options!(name, options = {}, no_upgrade: false, verbose: false)
         _ = no_upgrade
 
         unless package_manager_installed?
@@ -293,7 +327,7 @@ module Homebrew
           end
         end
 
-        if package_installed?(name, with:)
+        if package_installed?(name, **options)
           puts "Skipping install of #{name} #{package_description}. It is already installed." if verbose
           return false
         end
@@ -304,24 +338,59 @@ module Homebrew
       sig {
         params(
           name:       String,
-          with:       T.nilable(T::Array[String]),
+          no_upgrade: T::Boolean,
+          verbose:    T::Boolean,
+          options:    EntryOptions,
+        ).returns(T::Boolean).checked(:never)
+      }
+      def self.preinstall!(name, no_upgrade: false, verbose: false, **options)
+        preinstall_with_options!(name, options, no_upgrade:, verbose:)
+      end
+
+      sig {
+        params(
+          name:       String,
+          options:    EntryOptions,
           preinstall: T::Boolean,
           no_upgrade: T::Boolean,
           verbose:    T::Boolean,
           force:      T::Boolean,
         ).returns(T::Boolean)
       }
-      def self.install!(name, with: nil, preinstall: true, no_upgrade: false, verbose: false, force: false)
+      def self.install_with_options!(name, options = {}, preinstall: true, no_upgrade: false, verbose: false,
+                                     force: false)
         _ = no_upgrade
         _ = force
 
         return true unless preinstall
 
         puts "Installing #{name} #{package_description}. It is not currently installed." if verbose
-        return false unless install_package!(name, with:, verbose:)
+        return false unless install_package_with_options!(name, options, verbose:)
 
-        installed_packages << package_record(name, with:)
+        installed_packages << package_record_for(name, options)
         true
+      end
+
+      sig {
+        params(
+          name:       String,
+          preinstall: T::Boolean,
+          no_upgrade: T::Boolean,
+          verbose:    T::Boolean,
+          force:      T::Boolean,
+          options:    EntryOptions,
+        ).returns(T::Boolean).checked(:never)
+      }
+      def self.install!(name, preinstall: true, no_upgrade: false, verbose: false, force: false, **options)
+        install_with_options!(name, options, preinstall:, no_upgrade:, verbose:, force:)
+      end
+
+      sig { override.params(entries: T::Array[T.untyped]).returns(T::Array[Object]) }
+      def format_checkable(entries)
+        checkable_entries(entries).map do |entry|
+          entry = T.cast(entry, Dsl::Entry)
+          self.class.package_record_for(entry.name, self.class.entry_options(entry))
+        end
       end
 
       sig { override.params(package: Object, no_upgrade: T::Boolean).returns(String) }
@@ -331,17 +400,27 @@ module Homebrew
 
       sig { override.params(package: Object, no_upgrade: T::Boolean).returns(T::Boolean) }
       def installed_and_up_to_date?(package, no_upgrade: false)
-        self.class.package_installed?(self.class.dump_name(package), with: self.class.dump_with(package))
+        self.class.package_installed?(self.class.dump_name(package), **self.class.package_options(package))
       end
 
       sig {
         abstract.params(
           name:    String,
-          with:    T.nilable(T::Array[String]),
+          options: EntryOptions,
           verbose: T::Boolean,
         ).returns(T::Boolean)
       }
-      def self.install_package!(name, with: nil, verbose: false); end
+      def self.install_package_with_options!(name, options = {}, verbose: false); end
+
+      sig { params(name: String, verbose: T::Boolean, options: EntryOptions).returns(T::Boolean).checked(:never) }
+      def self.install_package!(name, verbose: false, **options)
+        install_package_with_options!(name, options, verbose:)
+      end
+
+      sig { params(_package: Object).returns(EntryOptions) }
+      def self.package_options(_package)
+        {}
+      end
     end
 
     class << self

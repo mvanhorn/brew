@@ -60,24 +60,27 @@ module Homebrew
           package_name(T.cast(package, ToolEntry))
         end
 
-        sig { override.params(package: Object).returns(T.nilable(T::Array[String])) }
-        def dump_with(package)
-          package_with(T.cast(package, ToolEntry))
+        sig { override.params(package: Object).returns(Homebrew::Bundle::Extension::EntryOptions) }
+        def dump_options(package)
+          with = package_with(T.cast(package, ToolEntry))
+          return {} if with.blank?
+
+          { with: }
         end
 
         sig {
           override.params(
             name:    String,
-            with:    T.nilable(T::Array[String]),
+            options: Homebrew::Bundle::Extension::EntryOptions,
             verbose: T::Boolean,
           ).returns(T::Boolean)
         }
-        def install_package!(name, with: nil, verbose: false)
+        def install_package_with_options!(name, options = {}, verbose: false)
           uv = package_manager_executable
           return false if uv.nil?
 
           args = ["tool", "install", name]
-          normalize_with(with || []).each do |requirement|
+          package_with_options(options).each do |requirement|
             args << "--with"
             args << requirement
           end
@@ -186,9 +189,9 @@ module Homebrew
         end
         private :normalize_name
 
-        sig { override.params(name: String, with: T.nilable(T::Array[String])).returns(Object) }
-        def package_record(name, with: nil)
-          normalized_options(name, with: with || [])
+        sig { override.params(name: String, options: Homebrew::Bundle::Extension::EntryOptions).returns(Object) }
+        def package_record_for(name, options = {})
+          normalized_options(name, with: package_with_options(options))
         end
 
         sig { params(name: String, with: T::Array[String]).returns(Tool) }
@@ -215,21 +218,20 @@ module Homebrew
           end
         end
         private :package_with
-      end
 
-      sig { override.params(entries: T::Array[Object]).returns(T::Array[Object]) }
-      def format_checkable(entries)
-        checkable_entries(entries).map do |entry|
-          entry = T.cast(entry, Dsl::Entry)
-          with = if entry.options.is_a?(Hash)
-            value = entry.options[:with]
-            value.is_a?(Array) ? value : []
-          else
-            []
-          end
-
-          self.class.package_record(entry.name, with:)
+        sig { override.params(package: Object).returns(Homebrew::Bundle::Extension::EntryOptions) }
+        def package_options(package)
+          { with: package_with(T.cast(package, ToolEntry)) || [] }
         end
+
+        sig { params(options: Homebrew::Bundle::Extension::EntryOptions).returns(T::Array[String]) }
+        def package_with_options(options)
+          with = options[:with]
+          return [] unless with.is_a?(Array)
+
+          with
+        end
+        private :package_with_options
       end
     end
 

@@ -30,23 +30,18 @@ module Homebrew
       }
       def self.build_brewfile(describe:, no_restart:, formulae:, taps:, casks:, mas:, vscode:, cargo:, flatpak:,
                               **extension_types)
-        extension_types = T.let(extension_types, Homebrew::Bundle::ExtensionTypes)
+        extension_types = T.let(
+          { mas:, vscode:, cargo:, flatpak:, **extension_types },
+          Homebrew::Bundle::ExtensionTypes,
+        )
         require "bundle/tap_dumper"
         require "bundle/formula_dumper"
         require "bundle/cask_dumper"
-        require "bundle/mac_app_store_dumper"
-        require "bundle/vscode_extension_dumper"
-        require "bundle/cargo_dumper"
-        require "bundle/flatpak_dumper"
 
         content = []
         content << TapDumper.dump if taps
         content << FormulaDumper.dump(describe:, no_restart:) if formulae
         content << CaskDumper.dump(describe:) if casks
-        content << MacAppStoreDumper.dump if mas
-        content << VscodeExtensionDumper.dump if vscode
-        content << CargoDumper.dump if cargo
-        content << FlatpakDumper.dump if flatpak
         Homebrew::Bundle.extensions.select(&:dump_supported?).each do |extension|
           next unless extension_types.fetch(extension.type, false)
 
@@ -74,7 +69,6 @@ module Homebrew
       }
       def self.dump_brewfile(global:, file:, describe:, force:, no_restart:, formulae:, taps:, casks:, mas:,
                              vscode:, cargo:, flatpak:, **extension_types)
-        extension_types = T.let(extension_types, Homebrew::Bundle::ExtensionTypes)
         path = brewfile_path(global:, file:)
         can_write_to_brewfile?(path, force:)
         content = build_brewfile(

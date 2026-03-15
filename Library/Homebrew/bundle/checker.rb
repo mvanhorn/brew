@@ -14,12 +14,8 @@ module Homebrew
         [10, :taps_to_tap],
         [20, :casks_to_install],
         [30, :extensions_to_install],
-        [40, :apps_to_install],
         [50, :formulae_to_install],
         [60, :formulae_to_start],
-        [70, :registered_extensions_to_install],
-        [80, :cargo_packages_to_install],
-        [100, :flatpaks_to_install],
       ].freeze, T::Array[[Integer, Symbol]])
 
       def self.check(global: false, file: nil, exit_on_first_error: false, no_upgrade: false, verbose: false)
@@ -66,46 +62,10 @@ module Homebrew
       end
 
       def self.apps_to_install(exit_on_first_error: false, no_upgrade: false, verbose: false)
-        require "bundle/mac_app_store_checker"
-        Homebrew::Bundle::Checker::MacAppStoreChecker.new.find_actionable(
-          @dsl.entries,
-          exit_on_first_error:, no_upgrade:, verbose:,
-        )
+        extension_check(:mas, exit_on_first_error:, no_upgrade:, verbose:)
       end
 
       def self.extensions_to_install(exit_on_first_error: false, no_upgrade: false, verbose: false)
-        require "bundle/vscode_extension_checker"
-        Homebrew::Bundle::Checker::VscodeExtensionChecker.new.find_actionable(
-          @dsl.entries,
-          exit_on_first_error:, no_upgrade:, verbose:,
-        )
-      end
-
-      def self.formulae_to_start(exit_on_first_error: false, no_upgrade: false, verbose: false)
-        require "bundle/brew_service_checker"
-        Homebrew::Bundle::Checker::BrewServiceChecker.new.find_actionable(
-          @dsl.entries,
-          exit_on_first_error:, no_upgrade:, verbose:,
-        )
-      end
-
-      def self.cargo_packages_to_install(exit_on_first_error: false, no_upgrade: false, verbose: false)
-        require "bundle/cargo_checker"
-        Homebrew::Bundle::Checker::CargoChecker.new.find_actionable(
-          @dsl.entries,
-          exit_on_first_error:, no_upgrade:, verbose:,
-        )
-      end
-
-      def self.flatpaks_to_install(exit_on_first_error: false, no_upgrade: false, verbose: false)
-        require "bundle/flatpak_checker"
-        Homebrew::Bundle::Checker::FlatpakChecker.new.find_actionable(
-          @dsl.entries,
-          exit_on_first_error:, no_upgrade:, verbose:,
-        )
-      end
-
-      def self.registered_extensions_to_install(exit_on_first_error: false, no_upgrade: false, verbose: false)
         errors = T.let([], T::Array[Object])
 
         Homebrew::Bundle.extensions.each do |extension|
@@ -123,17 +83,35 @@ module Homebrew
         errors
       end
 
+      def self.formulae_to_start(exit_on_first_error: false, no_upgrade: false, verbose: false)
+        require "bundle/brew_service_checker"
+        Homebrew::Bundle::Checker::BrewServiceChecker.new.find_actionable(
+          @dsl.entries,
+          exit_on_first_error:, no_upgrade:, verbose:,
+        )
+      end
+
+      def self.cargo_packages_to_install(exit_on_first_error: false, no_upgrade: false, verbose: false)
+        extension_check(:cargo, exit_on_first_error:, no_upgrade:, verbose:)
+      end
+
+      def self.flatpaks_to_install(exit_on_first_error: false, no_upgrade: false, verbose: false)
+        extension_check(:flatpak, exit_on_first_error:, no_upgrade:, verbose:)
+      end
+
+      def self.registered_extensions_to_install(exit_on_first_error: false, no_upgrade: false, verbose: false)
+        extensions_to_install(exit_on_first_error:, no_upgrade:, verbose:)
+      end
+
       def self.reset!
         require "bundle/cask_dumper"
         require "bundle/formula_dumper"
-        require "bundle/mac_app_store_dumper"
         require "bundle/tap_dumper"
         require "bundle/brew_services"
 
         @dsl = nil
         Homebrew::Bundle::CaskDumper.reset!
         Homebrew::Bundle::FormulaDumper.reset!
-        Homebrew::Bundle::MacAppStoreDumper.reset!
         Homebrew::Bundle::TapDumper.reset!
         Homebrew::Bundle::BrewServices.reset!
         Homebrew::Bundle.extensions.each(&:reset!)
@@ -154,6 +132,21 @@ module Homebrew
       }
       def self.run_check_step(check_step, exit_on_first_error:, no_upgrade:, verbose:)
         public_send(check_step, exit_on_first_error:, no_upgrade:, verbose:)
+      end
+
+      sig {
+        params(
+          type:                Symbol,
+          exit_on_first_error: T::Boolean,
+          no_upgrade:          T::Boolean,
+          verbose:             T::Boolean,
+        ).returns(T::Array[Object])
+      }
+      def self.extension_check(type, exit_on_first_error:, no_upgrade:, verbose:)
+        extension = Homebrew::Bundle.extension(type)
+        return [] if extension.nil?
+
+        extension.check(@dsl.entries, exit_on_first_error:, no_upgrade:, verbose:)
       end
     end
   end

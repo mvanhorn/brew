@@ -15,7 +15,6 @@ module Homebrew
         }
         def self.run(global:, file:, describe:, force:, no_restart:, taps:, formulae:, casks:, mas:,
                      vscode:, cargo:, flatpak:, **extension_types)
-          extension_types = T.let(extension_types, Homebrew::Bundle::ExtensionTypes)
           Homebrew::Bundle::Dumper.dump_brewfile(
             global:, file:, describe:, force:, no_restart:, taps:, formulae:, casks:, mas:, vscode:, cargo:,
             flatpak:, **extension_types

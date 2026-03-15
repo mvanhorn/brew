@@ -229,32 +229,25 @@ module Homebrew
         def self.vscode_extensions_to_uninstall(global: false, file: nil)
           raise ArgumentError, "@dsl is unset!" unless @dsl
 
-          kept_extensions = @dsl.entries.select { |e| e.type == :vscode }.map { |x| x.name.downcase }
+          extension = Homebrew::Bundle.extension(:vscode)
+          return [] if extension.nil?
 
           # To provide a graceful migration from `Brewfile`s that don't yet or
           # don't want to use `vscode`: don't remove any extensions if we don't
           # find any in the `Brewfile`.
-          return [].freeze if kept_extensions.empty?
-
-          require "bundle/vscode_extension_dumper"
-          current_extensions = Homebrew::Bundle::VscodeExtensionDumper.extensions
-          current_extensions - kept_extensions
+          extension.cleanup_items(@dsl.entries)
         end
 
         def self.flatpaks_to_uninstall(global: false, file: nil)
           raise "call `run` or `read_dsl_from_brewfile!` first" unless @dsl
-          return [].freeze unless Bundle.flatpak_installed?
 
-          kept_flatpaks = @dsl.entries.select { |e| e.type == :flatpak }.map(&:name)
+          extension = Homebrew::Bundle.extension(:flatpak)
+          return [] if extension.nil?
 
           # To provide a graceful migration from `Brewfile`s that don't yet or
           # don't want to use `flatpak`: don't remove any flatpaks if we don't
           # find any in the `Brewfile`.
-          return [].freeze if kept_flatpaks.empty?
-
-          require "bundle/flatpak_dumper"
-          current_flatpaks = Homebrew::Bundle::FlatpakDumper.packages
-          current_flatpaks - kept_flatpaks
+          extension.cleanup_items(@dsl.entries)
         end
 
         def self.system_output_no_stderr(cmd, *args)

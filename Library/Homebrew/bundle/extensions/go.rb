@@ -75,12 +75,12 @@ module Homebrew
         sig {
           override.params(
             name:    String,
-            with:    T.nilable(T::Array[String]),
+            options: Homebrew::Bundle::Extension::EntryOptions,
             verbose: T::Boolean,
           ).returns(T::Boolean)
         }
-        def install_package!(name, with: nil, verbose: false)
-          _ = with
+        def install_package_with_options!(name, options = {}, verbose: false)
+          _ = options
 
           go = package_manager_executable
           return false if go.nil?

@@ -14,7 +14,6 @@ module Homebrew
                  flatpak: T::Boolean, extension_types: T::Boolean).void
         }
         def self.run(global:, file:, formulae:, casks:, taps:, mas:, vscode:, cargo:, flatpak:, **extension_types)
-          extension_types = T.let(extension_types, Homebrew::Bundle::ExtensionTypes)
           parsed_entries = Brewfile.read(global:, file:).entries
           Homebrew::Bundle::Lister.list(
             parsed_entries,
